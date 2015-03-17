@@ -1,0 +1,15 @@
+{
+  "name": "Sonda",
+  "version": "1.0.0",
+  "author": {
+    "name": "Filip Chalupa",
+    "email": "chalupa.filip@gmail.com"
+  },
+  "scripts": {
+    "start": "node server.js 3999"
+  },
+  "main": "server.js",
+  "dependencies": {
+    "net": "^1.0.2"
+  }
+}
