@@ -1,5 +1,6 @@
 var net = require('net');
 var Robot = require('./robot');
+var robots = [];
 
 
 var port = parseInt(process.argv[2], 10);
@@ -10,7 +11,7 @@ if (isNaN(port) || port < 3000 || port > 3999) {
 }
 
 var server = net.createServer(function(socket) {
-    new Robot(socket);
+    robots.push(new Robot(socket));
 });
 
 server.listen(port, function() {
