@@ -53,35 +53,53 @@ Robot.prototype.addListeners = function() {
 
 Robot.prototype.processData = function() {
     var that = this;
-    var input = '';
+    var input = new Buffer(0, 'hex');
     var separator = {
-        'login': '\r\n',
-        'password': '\r\n',
-        'message': ' ',
-        'info': '\r\n',
-        'fotoLength': ' '
+        'login': [13, 10], // \r\n
+        'password': [13, 10],
+        'message': [32], // space
+        'info': [13, 10],
+        'fotoLength': [32]
     };
 
     this.socket.on('data', function(data) {
-        var splitedData;
-        input += data.toString();
+        input = Buffer.concat([input, new Buffer(data, 'hex')]);
+        console.log('HEX: ' + input[0] + ' ' + input[1] + ' ' + input[2] + ' ' + input[3]);
+
+        console.log(input.toString());
 
         if (that.state === 'foto') {
             // TODO
         } else {
             while (true) {
-                splitedData = input.split(separator[that.state]);
-                if (splitedData.length === 1) {
+                var len = input.length - separator[that.state].length + 1;
+                var sepI = 0;
+                var match = false;
+                for (var i = 0; i < len; i++) {
+                    if (input[i] === separator[that.state][sepI]) {
+                        match = true;
+                        for (var ii = 1; ii < separator[that.state].length; ii++) {
+                            i++;
+                            if (input[i] !== separator[that.state][ii]) {
+                                match = false;
+                            }
+                        }
+                        if (match === true) {
+                            that.processInputStringPart(input.slice(0, i - separator[that.state].length + 1).toString());
+                            input = input.slice(i + 1);
+                            break;
+                        }
+                    }
+                };
+                if (match === false) {
                     break;
                 }
-                that.processInputPart(splitedData[0]);
-                input = splitedData[1];
             }
         }
     });
 };
 
-Robot.prototype.processInputPart = function(data) {
+Robot.prototype.processInputStringPart = function(data) {
     switch (this.state) {
         case 'login':
             this.name = data;
