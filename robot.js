@@ -6,7 +6,6 @@ var Robot = function(socket) {
     this.timeout = false;
 
     this.state = 'login';
-    this.fotoLength;
 
     this.log('Robot connected.');
 
@@ -16,6 +15,7 @@ var Robot = function(socket) {
 
     this.log('Waiting for name.');
     this.sendMessage('LOGIN');
+
 };
 
 Robot.id = 1;
@@ -24,15 +24,14 @@ Robot.MESSAGE = {
     'LOGIN':         '200 LOGIN',
     'PASSWORD':      '201 PASSWORD',
     'OK':            '202 OK',
-    'BAD_CHECKSUM':  '300 BAD CHECKSUM',
-    'LOGIN_FAILED':  '500 LOGIN FAILED',
-    'SYNTAX_ERROR':  '501 SYNTAX ERROR',
+    'BAD CHECKSUM':  '300 BAD CHECKSUM',
+    'LOGIN FAILED':  '500 LOGIN FAILED',
+    'SYNTAX ERROR':  '501 SYNTAX ERROR',
     'TIMEOUT':       '502 TIMEOUT',
 };
 
 Robot.prototype.log = function(message) {
-    var name = (this.name.length === 0)?'':' ' + this.name;
-    console.log('[' + this.id + name + ']\t' + message);
+    console.log('[' + this.id + ']\t' + message);
 };
 
 Robot.prototype.sendMessage = function(type) {
@@ -46,6 +45,7 @@ Robot.prototype.addListeners = function() {
 
     this.socket.on('end', function() {
         that.log('Robot disconnected.');
+        that.state = false;
         clearTimeout(that.timeout);
     });
     this.processData();
@@ -54,55 +54,109 @@ Robot.prototype.addListeners = function() {
 Robot.prototype.processData = function() {
     var that = this;
     var input = new Buffer(0, 'hex');
-    var separator = {
-        'login': [13, 10], // \r\n
-        'password': [13, 10],
-        'message': [32], // space
-        'info': [13, 10],
-        'fotoLength': [32]
+    var separator = [13, 10]; // \r\n
+    var foto;
+    var fotoLength = 0;
+
+    var processBuffer = function() {
+        if (that.state === false) {
+            return false;
+        }
+
+        if (that.state === 'foto') {
+            if (input.length >= fotoLength) {
+                foto = input.slice(0, fotoLength);
+                input = input.slice(fotoLength);
+                that.state = 'fotoChecksum'
+                return true;
+            }
+        } else if (that.state === 'fotoChecksum') {
+            if (input.length >= 4) {
+                var checksum = 0;
+                for (var i = 0; i < foto.length; i++) {
+                    checksum += foto[i];
+                }
+                if (input.readUInt32BE(0) === checksum) {
+                    // Save photo
+                    that.log('Photo received.');
+                    that.sendMessage('OK');
+                    that.log('Waiting for message.');
+                } else {
+                    that.sendMessage('BAD CHECKSUM');
+                }
+                fotoLength = 0;
+                input = input.slice(4);
+                that.state = 'message';
+                return true;
+            }
+        } else if (that.state === 'message') {
+            var checkPart = (input.length > 5 ? input.slice(0, 5) : input).toString();
+            if (checkPart !== 'INFO '.substr(0, checkPart.length) && checkPart !== 'FOTO '.substr(0, checkPart.length)) {
+                that.closeConnection('SYNTAX ERROR');
+            } else {
+                if (input.length >= 5) {
+                    if (checkPart === 'INFO ') {
+                        that.state = 'info';
+                    } else {
+                        that.state = 'fotoLength';
+                    }
+                    input = input.slice(5);
+                    return true;
+                }
+            }
+        } else if (that.state === 'fotoLength') {
+            while (input.length > 0) {
+                if (input[0] >= 48 && input[0] <= 57) {
+                    fotoLength = fotoLength * 10 + (input[0] - 48);
+                    input = input.slice(1);
+                } else if (input[0] === 32 && fotoLength > 0) {
+                    that.state = 'foto';
+                    input = input.slice(1);
+                    return true;
+                } else {
+                    that.closeConnection('SYNTAX ERROR');
+                    break;
+                }
+            }
+        } else {
+            var len = input.length - separator.length + 1;
+            var sepI = 0;
+            var match = false;
+            for (var i = 0; i < len; i++) {
+                if (input[i] === separator[sepI]) {
+                    match = true;
+                    for (var ii = 1; ii < separator.length; ii++) {
+                        i++;
+                        if (input[i] !== separator[ii]) {
+                            match = false;
+                        }
+                    }
+                    if (match === true) {
+                        that.processInputStringPart(input.slice(0, i - separator.length + 1));
+                        input = input.slice(i + 1);
+                        return true;
+                    }
+                }
+            };
+        }
+        return false;
     };
 
     this.socket.on('data', function(data) {
         input = Buffer.concat([input, new Buffer(data, 'hex')]);
-        console.log('HEX: ' + input[0] + ' ' + input[1] + ' ' + input[2] + ' ' + input[3]);
-
-        console.log(input.toString());
-
-        if (that.state === 'foto') {
-            // TODO
-        } else {
-            while (true) {
-                var len = input.length - separator[that.state].length + 1;
-                var sepI = 0;
-                var match = false;
-                for (var i = 0; i < len; i++) {
-                    if (input[i] === separator[that.state][sepI]) {
-                        match = true;
-                        for (var ii = 1; ii < separator[that.state].length; ii++) {
-                            i++;
-                            if (input[i] !== separator[that.state][ii]) {
-                                match = false;
-                            }
-                        }
-                        if (match === true) {
-                            that.processInputStringPart(input.slice(0, i - separator[that.state].length + 1).toString());
-                            input = input.slice(i + 1);
-                            break;
-                        }
-                    }
-                };
-                if (match === false) {
-                    break;
-                }
-            }
-        }
+        //that.log('IN: '+input.toString());
+        while(processBuffer()) {}
     });
 };
 
 Robot.prototype.processInputStringPart = function(data) {
+    if (this.state !== 'login') {
+        data = data.toString();
+    }
     switch (this.state) {
         case 'login':
             this.name = data;
+            this.log('Robot name: ' + (this.name.length < 50 ? this.name.toString() : this.name.slice(0, 47).toString() + '...'));
             this.log('Waiting for password.');
             this.sendMessage('PASSWORD');
             this.state = 'password';
@@ -115,27 +169,11 @@ Robot.prototype.processInputStringPart = function(data) {
                 this.state = 'message';
             }
             break;
-        case 'message':
-            if (data === 'INFO') {
-                this.state = 'info';
-            } else if (data === 'FOTO') {
-                this.state = 'fotoLength';
-            } else {
-                this.log('Syntax error.');
-                this.closeConnection('SYNTAX_ERROR');
-            }
-            break;
         case 'info':
-            this.log('INFO: ' + data);
+            this.log('INFO: ' + (data.length < 50 ? data : data.slice(0, 47) + '...'));
+            this.sendMessage('OK');
+            this.log('Waiting for message.');
             this.state = 'message';
-            break;
-        case 'fotoLength':
-            this.fotoLength = parseInt(data, 10);
-            if (isNaN(this.fotoLength)) {
-                this.log('Syntax error.');
-                this.closeConnection('SYNTAX_ERROR');
-            }
-            this.state = 'foto';
             break;
         default:
             this.log('Something went wrong.');
@@ -145,12 +183,13 @@ Robot.prototype.processInputStringPart = function(data) {
 Robot.prototype.setConnectionTimeout = function() {
     var that = this;
     this.timeout = setTimeout(function() {
-        that.log('Connection timeout.');
         that.closeConnection('TIMEOUT');
     }, 45000);
 };
 
 Robot.prototype.closeConnection = function(type) {
+    this.log('ERROR: ' + type + '!');
+    this.state = false;
     this.sendMessage(type);
     this.socket.end();
 };
@@ -159,15 +198,14 @@ Robot.prototype.validateCredentials = function() {
     var sum = 0;
     var i = this.name.length;
     while (i--) {
-        sum += this.name.charCodeAt(i);
+        sum += this.name[i]
     }
 
-    if (parseInt(this.password, 10) === sum && this.name.substr(0, 5) === 'Robot') {
+    if (parseInt(this.password, 10) === sum && this.name.toString().substr(0, 5) === 'Robot') {
         this.log('Robot verified.');
         return true;
     } else {
-        this.log('Wrong credentials.');
-        this.closeConnection('LOGIN_FAILED');
+        this.closeConnection('LOGIN FAILED');
     }
     return false;
 };
