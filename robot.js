@@ -1,10 +1,17 @@
+/**
+ * Creates a new Robot.
+ * @class
+ */
 var Robot = function(socket) {
     this.id = Robot.id++;
     this.socket = socket;
     this.name = '';
     this.password = '';
+
+    /** setTimeout reference */
     this.timeout = false;
 
+    /** Robot's current state */
     this.state = 'login';
 
     this.log('Robot connected.');
@@ -30,16 +37,30 @@ Robot.MESSAGE = {
     'TIMEOUT':       '502 TIMEOUT',
 };
 
+/**
+ * Writes message to console with Robot's id.
+ * @param {string} message Message to be written.
+ * @function log
+ */
 Robot.prototype.log = function(message) {
     console.log('[' + this.id + ']\t' + message);
 };
 
+/**
+ * Sends predefined message over network to a client associated with the Robot.
+ * @param {string} type Key from Robot.MESSAGE.
+ * @function sendMessage
+ */
 Robot.prototype.sendMessage = function(type) {
     try {
         this.socket.write(Robot.MESSAGE[type] + '\r\n');
     } catch (e) {}
 };
 
+/**
+ * Adds listeners for incoming data.
+ * @function addListeners
+ */
 Robot.prototype.addListeners = function() {
     var that = this;
 
@@ -51,6 +72,10 @@ Robot.prototype.addListeners = function() {
     this.processData();
 };
 
+/**
+ * Resolves incoming data.
+ * @function processData
+ */
 Robot.prototype.processData = function() {
     var that = this;
     var input = new Buffer(0, 'hex');
@@ -64,6 +89,7 @@ Robot.prototype.processData = function() {
         }
 
         if (that.state === 'foto') {
+            /** Processes photo data. */
             if (input.length >= fotoLength) {
                 foto = input.slice(0, fotoLength);
                 input = input.slice(fotoLength);
@@ -71,13 +97,14 @@ Robot.prototype.processData = function() {
                 return true;
             }
         } else if (that.state === 'fotoChecksum') {
+            /** Processes 4 bytes of photo data checksum. */
             if (input.length >= 4) {
                 var checksum = 0;
                 for (var i = 0; i < foto.length; i++) {
                     checksum += foto[i];
                 }
                 if (input.readUInt32BE(0) === checksum) {
-                    // Save photo
+                    // TODO: Save photo
                     that.log('Photo received.');
                     that.sendMessage('OK');
                     that.log('Waiting for message.');
@@ -90,6 +117,7 @@ Robot.prototype.processData = function() {
                 return true;
             }
         } else if (that.state === 'message') {
+            /** Processes whether next incoming data will be part of INFO or FOTO. */
             var checkPart = (input.length > 5 ? input.slice(0, 5) : input).toString();
             if (checkPart !== 'INFO '.substr(0, checkPart.length) && checkPart !== 'FOTO '.substr(0, checkPart.length)) {
                 that.closeConnection('SYNTAX ERROR');
@@ -105,6 +133,7 @@ Robot.prototype.processData = function() {
                 }
             }
         } else if (that.state === 'fotoLength') {
+            /** Processes photo length. */
             while (input.length > 0) {
                 if (input[0] >= 48 && input[0] <= 57) {
                     fotoLength = fotoLength * 10 + (input[0] - 48);
@@ -119,6 +148,7 @@ Robot.prototype.processData = function() {
                 }
             }
         } else {
+            /** Processes rest (name, password, INFO text). */
             var len = input.length - separator.length + 1;
             var sepI = 0;
             var match = false;
@@ -144,11 +174,15 @@ Robot.prototype.processData = function() {
 
     this.socket.on('data', function(data) {
         input = Buffer.concat([input, new Buffer(data, 'hex')]);
-        //that.log('IN: '+input.toString());
         while(processBuffer()) {}
     });
 };
 
+/**
+ * Resolves some complete messages.
+ * @param {string | Buffer} data Key from Robot.MESSAGE.
+ * @function processInputStringPart
+ */
 Robot.prototype.processInputStringPart = function(data) {
     if (this.state !== 'login') {
         data = data.toString();
@@ -180,6 +214,10 @@ Robot.prototype.processInputStringPart = function(data) {
     }
 };
 
+/**
+ * Sets connection timeout to 45 seconds.
+ * @function setConnectionTimeout
+ */
 Robot.prototype.setConnectionTimeout = function() {
     var that = this;
     this.timeout = setTimeout(function() {
@@ -187,6 +225,11 @@ Robot.prototype.setConnectionTimeout = function() {
     }, 45000);
 };
 
+/**
+ * Closes connection with the client and send error message.
+ * @param {string} type Key from Robot.MESSAGE.
+ * @function closeConnection
+ */
 Robot.prototype.closeConnection = function(type) {
     this.log('ERROR: ' + type + '!');
     this.state = false;
@@ -194,6 +237,10 @@ Robot.prototype.closeConnection = function(type) {
     this.socket.end();
 };
 
+/**
+ * Validates name and password combination.
+ * @function validateCredentials
+ */
 Robot.prototype.validateCredentials = function() {
     var sum = 0;
     var i = this.name.length;
