@@ -1,3 +1,5 @@
+var coolors = require('coolors');
+
 /**
  * Creates a new Robot.
  * @class
@@ -14,13 +16,13 @@ var Robot = function(socket) {
     /** Robot's current state */
     this.state = 'login';
 
-    this.log('Robot connected.');
+    this.log('Robot connected.', 'info');
 
     this.addListeners();
 
     this.setConnectionTimeout();
 
-    this.log('Waiting for name.');
+    this.log('Waiting for name.', 'info');
     this.sendMessage('LOGIN');
 
 };
@@ -42,8 +44,24 @@ Robot.MESSAGE = {
  * @param {string} message Message to be written.
  * @function log
  */
-Robot.prototype.log = function(message) {
-    console.log('[' + this.id + ']\t' + message);
+Robot.prototype.log = function(message, type) {
+    var color;
+    var out = console.log;
+
+    switch (type) {
+        case 'info':
+            color = 'gray';
+            break;
+        case 'error':
+            color = 'red';
+            out = console.error
+            break;
+        case 'data':
+            color = 'cyan';
+            break;
+    }
+
+    out(coolors('[' + this.id + ']', {text: color, background: 'black', inverse: true}), coolors(message, color));
 };
 
 /**
@@ -65,7 +83,7 @@ Robot.prototype.addListeners = function() {
     var that = this;
 
     this.socket.on('end', function() {
-        that.log('Robot disconnected.');
+        that.log('Robot disconnected.', 'info');
         that.state = false;
         clearTimeout(that.timeout);
     });
@@ -105,15 +123,16 @@ Robot.prototype.processData = function() {
                 }
                 if (input.readUInt32BE(0) === checksum) {
                     // TODO: Save photo
-                    that.log('Photo received.');
+                    that.log('Photo received.', 'info');
                     that.sendMessage('OK');
-                    that.log('Waiting for message.');
                 } else {
+                    that.log('Bad photo checksum.', 'error');
                     that.sendMessage('BAD CHECKSUM');
                 }
                 fotoLength = 0;
                 input = input.slice(4);
                 that.state = 'message';
+                that.log('Waiting for message.', 'info');
                 return true;
             }
         } else if (that.state === 'message') {
@@ -190,8 +209,8 @@ Robot.prototype.processInputStringPart = function(data) {
     switch (this.state) {
         case 'login':
             this.name = data;
-            this.log('Robot name: ' + (this.name.length < 50 ? this.name.toString() : this.name.slice(0, 47).toString() + '...'));
-            this.log('Waiting for password.');
+            this.log('Robot name: ' + (this.name.length < 50 ? this.name.toString() : this.name.slice(0, 47).toString() + '...'), 'data');
+            this.log('Waiting for password.', 'info');
             this.sendMessage('PASSWORD');
             this.state = 'password';
             break;
@@ -199,18 +218,18 @@ Robot.prototype.processInputStringPart = function(data) {
             this.password = data;
             if (this.validateCredentials() === true) {
                 this.sendMessage('OK');
-                this.log('Waiting for message.');
+                this.log('Waiting for message.', 'info');
                 this.state = 'message';
             }
             break;
         case 'info':
-            this.log('INFO: ' + (data.length < 50 ? data : data.slice(0, 47) + '...'));
+            this.log('INFO: ' + (data.length < 50 ? data : data.slice(0, 47) + '...'), 'data');
             this.sendMessage('OK');
-            this.log('Waiting for message.');
+            this.log('Waiting for message.', 'info');
             this.state = 'message';
             break;
         default:
-            this.log('Something went wrong.');
+            this.log('Something went wrong.', 'error');
     }
 };
 
@@ -231,7 +250,7 @@ Robot.prototype.setConnectionTimeout = function() {
  * @function closeConnection
  */
 Robot.prototype.closeConnection = function(type) {
-    this.log('ERROR: ' + type + '!');
+    this.log('ERROR: ' + type + '!', 'error');
     this.state = false;
     this.sendMessage(type);
     this.socket.end();
@@ -249,7 +268,7 @@ Robot.prototype.validateCredentials = function() {
     }
 
     if (parseInt(this.password, 10) === sum && this.name.toString().substr(0, 5) === 'Robot') {
-        this.log('Robot verified.');
+        this.log('Robot verified.', 'info');
         return true;
     } else {
         this.closeConnection('LOGIN FAILED');
