@@ -245,7 +245,7 @@ Robot.prototype.setConnectionTimeout = function() {
 };
 
 /**
- * Closes connection with the client and send error message.
+ * Closes connection with the client and sends error message.
  * @param {string} type Key from Robot.MESSAGE.
  * @function closeConnection
  */
