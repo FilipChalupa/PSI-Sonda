@@ -93,7 +93,7 @@ Robot.prototype.processData = function() {
             if (input.length >= fotoLength) {
                 foto = input.slice(0, fotoLength);
                 input = input.slice(fotoLength);
-                that.state = 'fotoChecksum'
+                that.state = 'fotoChecksum';
                 return true;
             }
         } else if (that.state === 'fotoChecksum') {
@@ -152,22 +152,22 @@ Robot.prototype.processData = function() {
             var len = input.length - separator.length + 1;
             var sepI = 0;
             var match = false;
-            for (var i = 0; i < len; i++) {
-                if (input[i] === separator[sepI]) {
+            for (var x = 0; x < len; x++) {
+                if (input[x] === separator[sepI]) {
                     match = true;
                     for (var ii = 1; ii < separator.length; ii++) {
-                        i++;
-                        if (input[i] !== separator[ii]) {
+                        x++;
+                        if (input[x] !== separator[ii]) {
                             match = false;
                         }
                     }
                     if (match === true) {
-                        that.processInputStringPart(input.slice(0, i - separator.length + 1));
-                        input = input.slice(i + 1);
+                        that.processInputStringPart(input.slice(0, x - separator.length + 1));
+                        input = input.slice(x + 1);
                         return true;
                     }
                 }
-            };
+            }
         }
         return false;
     };
@@ -245,7 +245,7 @@ Robot.prototype.validateCredentials = function() {
     var sum = 0;
     var i = this.name.length;
     while (i--) {
-        sum += this.name[i]
+        sum += this.name[i];
     }
 
     if (parseInt(this.password, 10) === sum && this.name.toString().substr(0, 5) === 'Robot') {
